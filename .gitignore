@@ -1,0 +1,57 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.py.class
+
+# ---- Virtual Environments ----
+.venv/
+venv/
+env/
+ENV/
+.venv.bak/
+
+# ---- IDE / PyCharm ----
+.idea/
+.vscode/
+*.iml
+
+# ---- OS Files ----
+.DS_Store
+Thumbs.db
+
+# ---- Byte-compiled / Cache ----
+*.egg-info/
+.eggs/
+*.egg
+*.manifest
+*.spec
+pip-wheel-metadata/
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Database / Migrations ----
+alembic/versions/*.pyc
+*.sqlite3
+*.db
+
+# ---- Environment Variables ----
+.env
+.env.*
+!.env.example
+
+# ---- Test / Coverage ----
+.coverage
+.tox/
+nosetests.xml
+coverage.xml
+pytest_cache/
+htmlcov/
+
+# ---- Build / Distribution ----
+build/
+dist/
