@@ -1,20 +1,22 @@
 from fastapi import FastAPI
-from app.db.session import engine
+from app.api.v1.endpoints import auth
+from app.middleware.auth_middleware import AuthMiddleware
 
-app = FastAPI(title="Banking API", version="1.0.0")
+import logging
+
+logging.basicConfig(level=logging.DEBUG)
+
+app = FastAPI(
+    title="Bank API",
+    description="سیستم بانکی برای مدیریت کاربران، کارت‌ها و تراکنش‌ها",
+    version="1.0.0",
+)
+
+
+app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+app.add_middleware(AuthMiddleware)
 
 
 @app.get("/")
-def root():
-    return {"message": "Banking API is running"}
-
-
-
-@app.on_event("startup")
-async def startup_event():
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(lambda x: None)
-        print("Database connected successfully!")
-    except Exception as e:
-        print("Database connection failed:", e)
+async def root():
+    return {"message": "Welcome to Bank API 🚀"}

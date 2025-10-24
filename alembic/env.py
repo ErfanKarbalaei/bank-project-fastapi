@@ -4,8 +4,8 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 from app.db.session import Base
+from app.db import models
 from app.core.config import settings
-
 # import all models so Alembic detects them
 from app.db.models.user_model import User
 from app.db.models.card_model import Card
