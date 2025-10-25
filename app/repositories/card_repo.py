@@ -1,54 +1,86 @@
-from sqlalchemy import select, update, func
-from sqlalchemy.ext.asyncio import AsyncSession
-from decimal import Decimal
+# app/repositories/card_repo.py
 
-from app.db.models.card_model import Card
-from app.db.models.transaction_model import Transaction
+from decimal import Decimal
+from asyncpg import Connection, UniqueViolationError
+from datetime import date, datetime
+from typing import Optional
+
+
+# ⚠️ حذف ایمپورت‌های SQLAlchemy (select, update, func, AsyncSession)
 
 class CardRepository:
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    """Repository برای انجام عملیات مرتبط با کارت‌ها با asyncpg."""
 
-    async def get_by_id(self, card_id: int) -> Card | None:
-        q = select(Card).where(Card.id == card_id)
-        res = await self.db.execute(q)
-        return res.scalar_one_or_none()
+    def __init__(self, conn: Connection):
+        self.conn = conn
 
-    async def get_by_number(self, card_number: str) -> Card | None:
-        q = select(Card).where(Card.card_number == card_number)
-        res = await self.db.execute(q)
-        return res.scalar_one_or_none()
+    # ------------------ Retrieval Methods ------------------ #
 
-    async def lock_by_id(self, card_id: int) -> Card | None:
-        # SELECT ... FOR UPDATE to avoid race
-        q = select(Card).where(Card.id == card_id).with_for_update()
-        res = await self.db.execute(q)
-        return res.scalar_one_or_none()
+    async def get_by_id(self, card_id: int) -> dict | None:
+        """دریافت کارت بر اساس ID."""
+        sql = "SELECT * FROM cards WHERE id = $1;"
+        record = await self.conn.fetchrow(sql, card_id)
+        return dict(record) if record else None
 
-    async def change_balance(self, card: Card, amount: Decimal):
-        # amount can be negative
-        new_balance = (card.balance or Decimal("0")) + amount
-        stmt = (
-            update(Card)
-            .where(Card.id == card.id)
-            .values(balance=new_balance)
-            .returning(Card)
-        )
-        res = await self.db.execute(stmt)
-        await self.db.flush()
-        return res.fetchone()
+    async def get_by_number(self, card_number: str) -> dict | None:
+        """دریافت کارت بر اساس شماره کارت."""
+        sql = "SELECT * FROM cards WHERE card_number = $1;"
+        record = await self.conn.fetchrow(sql, card_number)
+        return dict(record) if record else None
 
-    async def list_by_user(self, user_id: int):
-        q = select(Card).where(Card.user_id == user_id)
-        res = await self.db.execute(q)
-        return res.scalars().all()
+    async def list_by_user(self, user_id: int) -> list[dict]:
+        """لیست کارت‌های متعلق به کاربر."""
+        sql = "SELECT * FROM cards WHERE user_id = $1 ORDER BY id;"
+        records = await self.conn.fetch(sql, user_id)
+        return [dict(record) for record in records]
 
-    async def daily_total_for_card(self, card_id: int, date_from, date_to):
-        q = (
-            select(func.coalesce(func.sum(Transaction.amount), 0))
-            .where(Transaction.source_card_id == card_id)
-            .where(Transaction.created_at >= date_from)
-            .where(Transaction.created_at < date_to)
-        )
-        res = await self.db.execute(q)
-        return res.scalar_one()
+    # ------------------ Creation ------------------ #
+
+    async def create_card(self, user_id: int, card_number: str, cvv2: str, expire_date: str) -> dict:
+        """ایجاد یک کارت جدید برای کاربر و برگرداندن رکورد جدید."""
+        sql = """
+            INSERT INTO cards (user_id, card_number, cvv2, expire_date, balance, is_active)
+            VALUES ($1, $2, $3, $4, 0.00, TRUE)
+            RETURNING *;
+        """
+        try:
+            record = await self.conn.fetchrow(
+                sql, user_id, card_number, cvv2, expire_date
+            )
+            return dict(record)
+        except UniqueViolationError:
+            # در صورت تکراری بودن شماره کارت
+            raise ValueError("Card number already exists")
+
+    # ------------------ Update / Lock Methods ------------------ #
+
+    async def lock_by_id(self, card_id: int) -> dict | None:
+        """دریافت کارت با قفل (SELECT ... FOR UPDATE)."""
+        sql = "SELECT * FROM cards WHERE id = $1 FOR UPDATE;"
+        record = await self.conn.fetchrow(sql, card_id)
+        return dict(record) if record else None
+
+    async def change_balance(self, card_id: int, amount: Decimal) -> bool:
+        """تغییر موجودی کارت (مقدار می‌تواند منفی باشد)."""
+        # ما فقط ID کارت را برای تغییر موجودی نیاز داریم
+        sql = "UPDATE cards SET balance = balance + $1 WHERE id = $2;"
+        status = await self.conn.execute(sql, amount, card_id)
+        # asyncpg نتیجه execute را به صورت 'UPDATE N' برمی‌گرداند.
+        return status == "UPDATE 1"
+
+    # ------------------ Aggregation Methods ------------------ #
+
+    async def daily_total_for_card(self, card_id: int, date_from: datetime, date_to: datetime) -> Decimal:
+        """محاسبه مجموع تراکنش‌های روزانه موفق برای یک کارت مبدأ در بازه زمانی مشخص."""
+        # ما فقط تراکنش‌های موفق را برای سقف روزانه حساب می‌کنیم
+        sql = """
+            SELECT COALESCE(SUM(amount), 0)
+            FROM transactions
+            WHERE source_card_id = $1
+            AND created_at >= $2
+            AND created_at < $3
+            AND status = 'SUCCESS';
+        """
+        # استفاده از fetchval برای دریافت یک مقدار واحد
+        total = await self.conn.fetchval(sql, card_id, date_from, date_to)
+        return Decimal(total or 0)
