@@ -1,6 +1,6 @@
 from decimal import Decimal, ROUND_DOWN
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import NoResultFound
 
@@ -81,19 +81,20 @@ class TransactionService:
             await self.db.execute(
                 update(Card)
                 .where(Card.id == card.id)
-                .values(balance=(Card.balance - total_debit))
+                .values(balance=Card.balance - literal(total_debit))
             )
             # flush to get id if needed
             await self.db.flush()
             return ins  # orm object (from_attributes / orm_mode will serialize)
 
-    async def transfer(self, source_card_number: str, dest_card_number: str, amount, description: str | None = None, user_id: int | None = None):
+    async def transfer(self, source_card_number: str, dest_card_number: str, amount, description: str | None = None,
+                       user_id: int | None = None):
         amount = Decimal(str(amount))
         if amount < MIN_TX or amount > MAX_TX:
             raise BusinessRuleViolation("Amount out of allowed range")
 
         async with self.db.begin_nested():
-            # Load both and lock in deterministic order to avoid deadlock
+            # Load and lock both cards to avoid deadlock
             q_src = select(Card).where(Card.card_number == source_card_number)
             q_dst = select(Card).where(Card.card_number == dest_card_number)
 
@@ -105,19 +106,21 @@ class TransactionService:
             if not src or not dst:
                 raise BusinessRuleViolation("Source or destination card not found")
 
-            # lock rows in id order
+            # Lock both rows deterministically
             first_id, second_id = (src.id, dst.id) if src.id < dst.id else (dst.id, src.id)
             q1 = select(Card).where(Card.id == first_id).with_for_update()
             q2 = select(Card).where(Card.id == second_id).with_for_update()
-            r1 = await self.db.execute(q1); row1 = r1.scalar_one()
-            r2 = await self.db.execute(q2); row2 = r2.scalar_one()
+            r1 = await self.db.execute(q1);
+            row1 = r1.scalar_one()
+            r2 = await self.db.execute(q2);
+            row2 = r2.scalar_one()
             locked_src = row1 if row1.id == src.id else row2
             locked_dst = row2 if row2.id == dst.id else row1
 
             if not locked_src.is_active or not locked_dst.is_active:
                 raise BusinessRuleViolation("One of cards is not active")
 
-            # daily cap check on source
+            # daily limit check
             now = datetime.now(timezone.utc)
             start = datetime.combine(now.date(), datetime.min.time()).replace(tzinfo=timezone.utc)
             end = start + timedelta(days=1)
@@ -145,12 +148,12 @@ class TransactionService:
             await self.db.execute(
                 update(Card)
                 .where(Card.id == locked_src.id)
-                .values(balance=(Card.balance - total_debit))
+                .values(balance=Card.balance - literal(total_debit))
             )
             await self.db.execute(
                 update(Card)
                 .where(Card.id == locked_dst.id)
-                .values(balance=(Card.balance + amount))
+                .values(balance=Card.balance + literal(amount))
             )
 
             await self.db.flush()

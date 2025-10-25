@@ -29,6 +29,7 @@ async def transfer(body: TransferIn, current_user: User = Depends(get_current_us
     svc = TransactionService(db)
     try:
         tx = await svc.transfer(body.source_card, body.dest_card, body.amount, body.description, user_id=current_user.id)
+        await db.commit()
         return tx
     except BusinessRuleViolation as e:
         raise HTTPException(status_code=400, detail=str(e))
