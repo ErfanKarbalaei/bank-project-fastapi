@@ -2,7 +2,6 @@ from sqlalchemy import Column, Integer, String, ForeignKey, Numeric, Boolean, Da
 from sqlalchemy.orm import relationship
 from app.db.session import Base
 
-
 class Card(Base):
     __tablename__ = "cards"
 

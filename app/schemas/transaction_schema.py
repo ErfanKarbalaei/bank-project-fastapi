@@ -1,24 +1,32 @@
-from pydantic import BaseModel, constr, Field, condecimal
-from decimal import Decimal
+# app/schemas/transaction_schema.py
+
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
+
+from pydantic import BaseModel, Field, constr, condecimal
 
 # نوع سفارشی برای تضمین مثبت بودن و حداکثر دو رقم اعشار
 PositiveDecimal = condecimal(gt=0, decimal_places=2)
 
 
 class TransferIn(BaseModel):
+    """مدل ورودی برای انتقال وجه بین کارت‌ها."""
     source_card: constr(min_length=16, max_length=16) = Field(..., description="شماره کارت مبدأ")
     dest_card: constr(min_length=16, max_length=16) = Field(..., description="شماره کارت مقصد")
-    amount: PositiveDecimal = Field(..., description="مبلغ انتقال (تومان)") # ✅ اعتبارسنجی
+    amount: PositiveDecimal = Field(..., description="مبلغ انتقال (تومان)")
     description: Optional[str] = Field(None, description="توضیحات تراکنش")
+
 
 class WithdrawIn(BaseModel):
+    """مدل ورودی برای برداشت وجه از کارت."""
     card_number: constr(min_length=16, max_length=16) = Field(..., description="شماره کارت برای برداشت")
-    amount: PositiveDecimal = Field(..., description="مبلغ برداشت (تومان)") # ✅ اعتبارسنجی
+    amount: PositiveDecimal = Field(..., description="مبلغ برداشت (تومان)")
     description: Optional[str] = Field(None, description="توضیحات تراکنش")
 
+
 class TransactionOut(BaseModel):
+    """مدل خروجی برای نمایش جزئیات تراکنش."""
     id: int
     source_card_id: Optional[int]
     dest_card_id: Optional[int]
@@ -28,34 +36,27 @@ class TransactionOut(BaseModel):
     description: Optional[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
+
 
 class RevenueFilters(BaseModel):
-    """
-    مدل Pydantic برای نگهداری فیلترهای ورودی API درآمد.
-    این مدل مستقیماً توسط FastAPI به عنوان Dependency استفاده می‌شود
-    تا پارامترهای کوئری (query parameters) را دریافت کند.
-    """
+    """مدل فیلترهای ورودی برای API درآمد (query params)."""
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
-    transaction_id: Optional[int] = None  # <-- از uuid.UUID به int تغییر کرد
+    transaction_id: Optional[int] = None
 
-    class Config:
-        # فعال کردن حالت orm_mode (که اکنون validate_assignment=True نامیده می‌شود)
-        # اگرچه برای query params ضروری نیست، اما عادت خوبی است.
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class TotalRevenueResponse(BaseModel):
-    """
-    مدل Pydantic برای پاسخ API درآمد.
-    """
+    """مدل خروجی API برای نمایش مجموع درآمد از کارمزدها."""
     total_revenue: Decimal
 
-    class Config:
-        from_attributes = True
-        json_encoders = {
-            Decimal: lambda v: float(v)  # برای سازگاری بهتر با JSON
-        }
-
+    model_config = {
+        "from_attributes": True,
+        "json_encoders": {Decimal: lambda v: float(v)}
+    }
