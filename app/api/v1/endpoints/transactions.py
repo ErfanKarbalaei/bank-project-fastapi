@@ -1,5 +1,6 @@
 # transaction:endpoint
-
+import logging
+import traceback
 from datetime import datetime
 from typing import Optional
 
@@ -88,13 +89,21 @@ async def withdraw(
 
         raise HTTPException(status_code=status_code, detail=str(e))
 
+
     except Exception as e:
-        print(f"Internal Server Error in withdraw: {e}")
+
+        # ✅ اصلاح: از traceback.format_exc() برای گرفتن جزئیات کامل خطا استفاده می‌کنیم.
+
+        full_traceback = traceback.format_exc()
+
+        # ✅ اصلاح: از logging.error به جای print استفاده می‌کنیم.
+
+        logging.error(f"Internal Server Error in transfer: {e}\n{full_traceback}")
+
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unknown error occurred.")
 
 
-@router.post("/transfer", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
-# ⚠️ user_id اکنون یک دیکشنری است
+@router.post("/transfer", response_model=TransactionOut, summary="انتقال وجه")
 async def transfer(
         body: TransferIn,
         current_user: dict = Depends(get_current_user),
@@ -117,14 +126,17 @@ async def transfer(
         if isinstance(e, ForbiddenOperation):
             status_code = status.HTTP_403_FORBIDDEN
         elif isinstance(e, InsufficientFunds):
+            # این خطا را هم به 400 برگردانید، چون از نظر فنی داده ورودی (کارت) در هنگام انتقال مشکل دارد.
             status_code = status.HTTP_400_BAD_REQUEST
 
         raise HTTPException(status_code=status_code, detail=str(e))
 
     except Exception as e:
-        print(f"Internal Server Error in transfer: {e}")
+        # ✅ اصلاح: از traceback.format_exc() برای گرفتن جزئیات کامل خطا استفاده می‌کنیم.
+        full_traceback = traceback.format_exc()
+        # ✅ اصلاح: از logging.error به جای print استفاده می‌کنیم.
+        logging.error(f"Internal Server Error in transfer: {e}\n{full_traceback}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="An unknown error occurred.")
-
 
 @router.get("/recent", response_model=list[TransactionOut])
 # ⚠️ user_id اکنون یک دیکشنری است

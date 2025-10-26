@@ -32,7 +32,7 @@ class TransactionRepository:
         ids = sorted([id1, id2])
 
         # ⚠️ اجرای قفل‌گذاری بر اساس ID مرتب شده
-        sql = "SELECT * FROM cards WHERE id IN ($1, $2) FOR UPDATE ORDER BY id;"
+        sql = "SELECT * FROM cards WHERE id IN ($1, $2) ORDER BY id FOR UPDATE ;"
 
         # استفاده از fetch برای دریافت دو رکورد
         locked_records = await self.conn.fetch(sql, ids[0], ids[1])
@@ -49,6 +49,43 @@ class TransactionRepository:
         return card_map[id1], card_map[id2]
 
     # ------------------ Transaction Queries ------------------ #
+    async def create_transaction(
+            self,
+            source_id: int,
+            dest_id: Optional[int],
+            amount: Decimal,
+            fee: Decimal,
+            status: str,
+            description: Optional[str] = None,
+    ) -> dict:
+        """ایجاد یک رکورد تراکنش جدید و بازگرداندن آن (با کوئری خام)."""
+        sql = """
+            INSERT INTO transactions 
+            (source_card_id, dest_card_id, amount, fee, status, description, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *; -- ⚠️ بازگرداندن ردیف جدید
+        """
+        # فرض می‌کنیم created_at در دیتابیس به صورت خودکار تنظیم می‌شود.
+        # اما برای اطمینان و دقت، آن را به صورت دستی یا از طریق دیتابیس می‌فرستیم.
+        # در اینجا از یک timestamp جدید استفاده می‌کنیم.
+        now = datetime.now()  # ⚠️ باید مطمئن شوید که timezone مناسبی دارد
+
+        record = await self.conn.fetchrow(
+            sql,
+            source_id,
+            dest_id,
+            amount,
+            fee,
+            status,
+            description,
+            now  # ارسال created_at
+        )
+
+        if record is None:
+            # در حالت عادی نباید اتفاق بیفتد مگر مشکل اتصال یا کوئری
+            raise Exception("Failed to create transaction record.")
+
+        return dict(record)
 
     async def recent_for_user(self, user_id: int, limit: int = 10) -> List[dict]:
         """
