@@ -1,46 +1,52 @@
 # app/repositories/user_repo.py
 
 from typing import Optional
+import asyncpg
+from asyncpg import Connection # ایمپورت Connection
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.db.models import user_model
-
+# ⚠️ دیگر نیازی به ایمپورت‌های SQLAlchemy نیست
+# from sqlalchemy import select
+# from sqlalchemy.ext.asyncio import AsyncSession
+# from app.db.models import user_model
 
 class UserRepository:
     """Repository برای مدیریت عملیات پایگاه داده مربوط به کاربران."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
+    # ⚠️ تغییر type hint
+    def __init__(self, conn: Connection):
+        self.conn = conn
 
     # ------------------ Retrieval Methods ------------------ #
 
-    async def get_by_phone(self, phone_number: str) -> Optional[user_model.User]:
-        """دریافت کاربر بر اساس شماره تلفن."""
-        q = select(user_model.User).where(user_model.User.phone_number == phone_number)
-        res = await self.session.execute(q)
-        return res.scalars().first()
+    async def get_by_phone(self, phone_number: str) -> Optional[dict]: # تغییر نوع بازگشتی به dict
+        """دریافت کاربر بر اساس شماره تلفن (با کوئری خام)."""
+        sql = "SELECT * FROM users WHERE phone_number = $1;"
+        record = await self.conn.fetchrow(sql, phone_number)
+        return dict(record) if record else None
 
-    async def get_by_id(self, user_id: int) -> Optional[user_model.User]:
-        """دریافت کاربر بر اساس شناسه (ID)."""
-        q = select(user_model.User).where(user_model.User.id == user_id)
-        res = await self.session.execute(q)
-        return res.scalars().first()
+    async def get_by_id(self, user_id: int) -> Optional[dict]: # تغییر نوع بازگشتی به dict
+        """دریافت کاربر بر اساس شناسه (ID) (با کوئری خام)."""
+        sql = "SELECT * FROM users WHERE id = $1;"
+        record = await self.conn.fetchrow(sql, user_id)
+        return dict(record) if record else None
 
     # ------------------ Creation ------------------ #
 
-    async def create(self, *, user_in) -> user_model.User:
-        """ایجاد کاربر جدید در پایگاه داده."""
-        user = user_model.User(
-            national_code=user_in.national_code,
-            full_name=user_in.full_name,
-            phone_number=user_in.phone_number,
-            email=user_in.email,
-            hashed_password=user_in.hashed_password,
+    async def create(self, *, user_in) -> dict: # تغییر نوع ورودی/خروجی
+        """ایجاد کاربر جدید در پایگاه داده (با کوئری خام)."""
+        sql = """
+            INSERT INTO users (national_code, full_name, phone_number, email, hashed_password)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING *; -- مهم: برای دریافت ردیف جدید (شامل ID و created_at)
+        """
+        # اجرای کوئری و دریافت سطر جدید
+        record = await self.conn.fetchrow(
+            sql,
+            user_in.national_code,
+            user_in.full_name,
+            user_in.phone_number,
+            user_in.email,
+            user_in.hashed_password,
         )
-        self.session.add(user)
-        await self.session.flush()  # برای دریافت ID
-        await self.session.commit()
-        await self.session.refresh(user)
-        return user
+        # asyncpg commitها را به صورت خودکار انجام می‌دهد مگر اینکه در بلوک transaction باشید
+        return dict(record)

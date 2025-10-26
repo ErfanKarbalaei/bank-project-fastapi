@@ -1,101 +1,149 @@
+# app/repositories/transaction_repo.py
+
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
+import asyncpg
+from asyncpg import Connection
 
-from sqlalchemy import select, func, and_
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.db.models.card_model import Card
-from app.db.models.transaction_model import Transaction
-
+# ⚠️ ایمپورت‌های SQLAlchemy حذف می‌شوند
 
 class TransactionRepository:
-    """Repository برای عملیات پایگاه داده مرتبط با تراکنش‌ها و کارت‌ها."""
+    """Repository برای عملیات پایگاه داده مرتبط با تراکنش‌ها و کارت‌ها با asyncpg."""
 
-    def __init__(self, db: AsyncSession):
-        self.db = db
+    # ⚠️ تغییر type hint
+    def __init__(self, conn: Connection):
+        self.conn = conn
 
-    # ------------------ Card Locking ------------------ #
+    # ------------------ Card Locking (In-Transaction) ------------------ #
 
-    async def get_card_by_number_for_update(self, card_number: str) -> Card | None:
-        """واکشی کارت با شماره کارت و قفل‌گذاری (SELECT ... FOR UPDATE)."""
-        q = (
-            select(Card)
-            .where(Card.card_number == card_number)
-            .with_for_update(nowait=False, of=Card)
-        )
-        res = await self.db.execute(q)
-        return res.scalar_one_or_none()
+    async def get_card_by_number_for_update(self, card_number: str) -> dict | None:
+        """واکشی کارت با شماره کارت و قفل‌گذاری (SELECT ... FOR UPDATE) با کوئری خام."""
+        # فرض می‌شود که این متد در داخل یک بلوک async with conn.transaction(): فراخوانی می‌شود.
+        sql = "SELECT * FROM cards WHERE card_number = $1 FOR UPDATE;"
+        record = await self.conn.fetchrow(sql, card_number)
+        return dict(record) if record else None
 
-    async def get_cards_by_id_for_update(self, id1: int, id2: int) -> tuple[Card, Card]:
+    async def get_cards_by_id_for_update(self, id1: int, id2: int) -> tuple[dict, dict]:
         """
-        واکشی و قفل دو کارت به‌صورت ترتیبی برای جلوگیری از Deadlock.
-        ترتیب IDها حفظ می‌شود تا قفل‌ها هم‌زمان با ترتیب یکسان اعمال شوند.
+        واکشی و قفل دو کارت به‌صورت ترتیبی برای جلوگیری از Deadlock (با کوئری خام).
         """
         ids = sorted([id1, id2])
 
-        q = (
-            select(Card)
-            .where(Card.id.in_(ids))
-            .with_for_update(nowait=False, of=Card)
-            .order_by(Card.id)
-        )
-        res = await self.db.execute(q)
-        locked_cards = res.scalars().all()
+        # ⚠️ اجرای قفل‌گذاری بر اساس ID مرتب شده
+        sql = "SELECT * FROM cards WHERE id IN ($1, $2) ORDER BY id FOR UPDATE ;"
 
-        if len(locked_cards) != 2:
+        # استفاده از fetch برای دریافت دو رکورد
+        locked_records = await self.conn.fetch(sql, ids[0], ids[1])
+
+        if len(locked_records) != 2:
             raise ValueError("Could not lock both cards during transfer.")
 
-        card_map = {c.id: c for c in locked_cards}
+        # تبدیل Row به دیکشنری
+        locked_cards = [dict(r) for r in locked_records]
+
+        # نگاشت مجدد به IDهای اصلی (id1, id2)
+        card_map = {c['id']: c for c in locked_cards}
+
         return card_map[id1], card_map[id2]
 
     # ------------------ Transaction Queries ------------------ #
+    async def create_transaction(
+            self,
+            source_id: int,
+            dest_id: Optional[int],
+            amount: Decimal,
+            fee: Decimal,
+            status: str,
+            description: Optional[str] = None,
+    ) -> dict:
+        """ایجاد یک رکورد تراکنش جدید و بازگرداندن آن (با کوئری خام)."""
+        sql = """
+            INSERT INTO transactions 
+            (source_card_id, dest_card_id, amount, fee, status, description, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING *; -- ⚠️ بازگرداندن ردیف جدید
+        """
+        # فرض می‌کنیم created_at در دیتابیس به صورت خودکار تنظیم می‌شود.
+        # اما برای اطمینان و دقت، آن را به صورت دستی یا از طریق دیتابیس می‌فرستیم.
+        # در اینجا از یک timestamp جدید استفاده می‌کنیم.
+        now = datetime.now()  # ⚠️ باید مطمئن شوید که timezone مناسبی دارد
 
-    async def recent_for_user(self, user_id: int, limit: int = 10):
-        """
-        دریافت تراکنش‌های اخیر کاربر (چه مبدأ و چه مقصد).
-        از selectinload برای واکشی کارت‌های مرتبط در همان کوئری استفاده می‌شود.
-        """
-        q = (
-            select(Transaction)
-            .options(
-                selectinload(Transaction.source_card),
-                selectinload(Transaction.dest_card),
-            )
-            .where(
-                (Transaction.source_card.has(user_id=user_id))
-                | (Transaction.dest_card.has(user_id=user_id))
-            )
-            .order_by(Transaction.created_at.desc())
-            .limit(limit)
+        record = await self.conn.fetchrow(
+            sql,
+            source_id,
+            dest_id,
+            amount,
+            fee,
+            status,
+            description,
+            now  # ارسال created_at
         )
-        res = await self.db.execute(q)
-        return res.scalars().all()
+
+        if record is None:
+            # در حالت عادی نباید اتفاق بیفتد مگر مشکل اتصال یا کوئری
+            raise Exception("Failed to create transaction record.")
+
+        return dict(record)
+
+    async def recent_for_user(self, user_id: int, limit: int = 10) -> List[dict]:
+        """
+        دریافت تراکنش‌های اخیر کاربر (چه مبدأ و چه مقصد) (با کوئری خام).
+        از LEFT JOIN برای کارت مقصد (dest_card_id=NULL) استفاده می‌شود.
+        """
+        sql = """
+            SELECT 
+                t.*,
+                sc.card_number as source_card_number,
+                -- ⚠️ dest_card_number می‌تواند NULL باشد
+                dc.card_number as dest_card_number
+            FROM transactions t
+            -- INNER JOIN برای کارت مبدأ (source_card_id همیشه مقدار دارد)
+            JOIN cards sc ON t.source_card_id = sc.id 
+            -- ✅ LEFT JOIN برای کارت مقصد (dest_card_id می‌تواند NULL باشد)
+            LEFT JOIN cards dc ON t.dest_card_id = dc.id 
+            -- شرط: کارت مبدأ متعلق به کاربر باشد (تراکنش‌های برداشت و واریز)
+            -- یا کارت مقصد متعلق به کاربر باشد (تراکنش‌های دریافتی/واریز به کارت کاربر)
+            WHERE sc.user_id = $1 
+            -- ✅ OR برای شامل شدن تراکنش‌هایی که dest_card_id آنها NULL است (برداشت)
+            -- همچنین تراکنش‌های واریز به کارت‌های این کاربر را هم شامل می‌شود.
+            OR dc.user_id = $1 
+            ORDER BY t.created_at DESC
+            LIMIT $2;
+        """
+        records = await self.conn.fetch(sql, user_id, limit)
+        return [dict(record) for record in records]
 
     # ------------------ Aggregation ------------------ #
 
     async def fee_sum(
-        self,
-        date_from: Optional[datetime] = None,
-        date_to: Optional[datetime] = None,
-        tx_id: Optional[int] = None,
+            self,
+            date_from: Optional[datetime] = None,
+            date_to: Optional[datetime] = None,
+            tx_id: Optional[int] = None,
     ) -> Decimal:
-        """
-        محاسبه مجموع کارمزد تراکنش‌های موفق با فیلترهای اختیاری:
-        - بازه زمانی (از / تا)
-        - آیدی تراکنش خاص (tx_id)
-        """
-        conditions = [Transaction.status == "SUCCESS"]
+        """محاسبه مجموع کارمزد تراکنش‌های موفق با فیلترهای اختیاری (با کوئری خام)."""
+
+        base_sql = "SELECT COALESCE(SUM(fee), 0) FROM transactions WHERE status = 'SUCCESS'"
+        args = []
+        i = 1
 
         if tx_id is not None:
-            conditions.append(Transaction.id == tx_id)
+            base_sql += f" AND id = ${i}"
+            args.append(tx_id)
+            i += 1
+
         if date_from:
-            conditions.append(Transaction.created_at >= date_from)
+            base_sql += f" AND created_at >= ${i}"
+            args.append(date_from)
+            i += 1
+
         if date_to:
-            conditions.append(Transaction.created_at <= date_to)
+            base_sql += f" AND created_at <= ${i}"
+            args.append(date_to)
+            i += 1
 
-        q = select(func.coalesce(func.sum(Transaction.fee), 0)).where(and_(*conditions))
-        res = await self.db.execute(q)
+        total = await self.conn.fetchval(base_sql, *args)
 
-        return Decimal(res.scalar_one() or 0)
+        return Decimal(total or 0)
