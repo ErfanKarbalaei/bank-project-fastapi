@@ -32,21 +32,19 @@ class UserRepository:
 
     # ------------------ Creation ------------------ #
 
-    async def create(self, *, user_in) -> dict: # تغییر نوع ورودی/خروجی
-        """ایجاد کاربر جدید در پایگاه داده (با کوئری خام)."""
+    async def create(self, user_in: dict) -> dict:
         sql = """
-            INSERT INTO users (national_code, full_name, phone_number, email, hashed_password)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING *; -- مهم: برای دریافت ردیف جدید (شامل ID و created_at)
+            INSERT INTO users (national_code, full_name, phone_number, email, hashed_password, is_active)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            RETURNING *;
         """
-        # اجرای کوئری و دریافت سطر جدید
         record = await self.conn.fetchrow(
             sql,
-            user_in.national_code,
-            user_in.full_name,
-            user_in.phone_number,
-            user_in.email,
-            user_in.hashed_password,
+            user_in["national_code"],
+            user_in["full_name"],
+            user_in["phone_number"],
+            user_in["email"],
+            user_in["hashed_password"],
+            True
         )
-        # asyncpg commitها را به صورت خودکار انجام می‌دهد مگر اینکه در بلوک transaction باشید
         return dict(record)

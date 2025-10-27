@@ -27,14 +27,17 @@ class AuthService:
         if exists:
             raise ValueError("Phone number already registered")
 
-        # هش کردن پسورد
         hashed_password = hash_password(user_in.password)
 
-        # افزودن فیلد هش‌شده به user_in
-        user_in.hashed_password = hashed_password
+        user_data = {
+            "national_code": user_in.national_code,
+            "full_name": user_in.full_name,
+            "phone_number": user_in.phone_number,
+            "email": user_in.email,
+            "hashed_password": hashed_password,
+        }
 
-        # ساخت کاربر جدید
-        created_user_dict = await self.user_repo.create(user_in=user_in)
+        created_user_dict = await self.user_repo.create(user_in=user_data)
         return created_user_dict
 
     async def authenticate(self, phone_number: str, password: str) -> Optional[dict]:  # 👈 خروجی dict
