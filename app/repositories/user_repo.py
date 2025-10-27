@@ -1,39 +1,26 @@
-# app/repositories/user_repo.py
-
 from typing import Optional
-import asyncpg
-from asyncpg import Connection # ایمپورت Connection
-
-# ⚠️ دیگر نیازی به ایمپورت‌های SQLAlchemy نیست
-# from sqlalchemy import select
-# from sqlalchemy.ext.asyncio import AsyncSession
-# from app.db.models import user_model
+from asyncpg import Connection
 
 class UserRepository:
-    """Repository برای مدیریت عملیات پایگاه داده مربوط به کاربران."""
+    """Repository برای مدیریت کاربران با asyncpg."""
 
-    # ⚠️ تغییر type hint
     def __init__(self, conn: Connection):
         self.conn = conn
 
-    # ------------------ Retrieval Methods ------------------ #
-
-    async def get_by_phone(self, phone_number: str) -> Optional[dict]: # تغییر نوع بازگشتی به dict
-        """دریافت کاربر بر اساس شماره تلفن (با کوئری خام)."""
+    async def get_by_phone(self, phone_number: str) -> Optional[dict]:
         sql = "SELECT * FROM users WHERE phone_number = $1;"
         record = await self.conn.fetchrow(sql, phone_number)
         return dict(record) if record else None
 
-    async def get_by_id(self, user_id: int) -> Optional[dict]: # تغییر نوع بازگشتی به dict
-        """دریافت کاربر بر اساس شناسه (ID) (با کوئری خام)."""
+    async def get_by_id(self, user_id: int) -> Optional[dict]:
         sql = "SELECT * FROM users WHERE id = $1;"
         record = await self.conn.fetchrow(sql, user_id)
         return dict(record) if record else None
 
-    async def get_by_national_code(self, national_code: str):
-        sql = "SELECT * FROM users WHERE national_code = $1"
-        return await self.conn.fetchrow(sql, national_code)
-    # ------------------ Creation ------------------ #
+    async def get_by_national_code(self, national_code: str) -> Optional[dict]:
+        sql = "SELECT * FROM users WHERE national_code = $1;"
+        record = await self.conn.fetchrow(sql, national_code)
+        return dict(record) if record else None
 
     async def create(self, user_in: dict) -> dict:
         sql = """

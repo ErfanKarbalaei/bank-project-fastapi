@@ -3,21 +3,18 @@ from asyncpg import Connection, UniqueViolationError
 from datetime import datetime, timezone
 from typing import Optional
 
-
 class CardRepository:
-    """Repository برای انجام عملیات مرتبط با کارت‌ها با asyncpg."""
+    """Repository برای کارت‌ها با asyncpg."""
 
     def __init__(self, conn: Connection):
         self.conn = conn
 
-    # ------------------ Retrieval Methods ------------------ #
-
-    async def get_by_id(self, card_id: int) -> dict | None:
+    async def get_by_id(self, card_id: int) -> Optional[dict]:
         sql = "SELECT * FROM cards WHERE id = $1;"
         record = await self.conn.fetchrow(sql, card_id)
         return dict(record) if record else None
 
-    async def get_by_number(self, card_number: str) -> dict | None:
+    async def get_by_number(self, card_number: str) -> Optional[dict]:
         sql = "SELECT * FROM cards WHERE card_number = $1;"
         record = await self.conn.fetchrow(sql, card_number)
         return dict(record) if record else None
@@ -25,9 +22,7 @@ class CardRepository:
     async def list_by_user(self, user_id: int) -> list[dict]:
         sql = "SELECT * FROM cards WHERE user_id = $1 ORDER BY id;"
         records = await self.conn.fetch(sql, user_id)
-        return [dict(record) for record in records]
-
-    # ------------------ Creation ------------------ #
+        return [dict(r) for r in records]
 
     async def create_card(self, user_id: int, card_number: str, cvv2: str, expire_date: str) -> dict:
         sql = """
@@ -41,8 +36,6 @@ class CardRepository:
         except UniqueViolationError:
             raise ValueError("Card number already exists")
 
-    # ------------------ Update / Lock Methods ------------------ #
-
     async def lock_by_id(self, card_id: int) -> dict:
         sql = "SELECT * FROM cards WHERE id = $1 FOR UPDATE;"
         record = await self.conn.fetchrow(sql, card_id)
@@ -50,12 +43,12 @@ class CardRepository:
             raise ValueError(f"Card with id {card_id} not found for update")
         return dict(record)
 
-    async def change_balance(self, card_id: int, amount: Decimal) -> Optional[Decimal]:
+    async def change_balance(self, card_id: int, amount: Decimal) -> Decimal:
         sql = "UPDATE cards SET balance = balance + $1 WHERE id = $2 RETURNING balance;"
         new_balance = await self.conn.fetchval(sql, amount, card_id)
-        return Decimal(new_balance) if new_balance is not None else None
-
-    # ------------------ Aggregation Methods ------------------ #
+        if new_balance is None:
+            raise ValueError(f"Card with id {card_id} not found for balance update")
+        return Decimal(new_balance)
 
     async def daily_total_for_card(self, card_id: int, date_from: datetime, date_to: datetime) -> Decimal:
         if date_from.tzinfo is None:
