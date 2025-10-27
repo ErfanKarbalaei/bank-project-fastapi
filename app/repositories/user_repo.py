@@ -30,6 +30,9 @@ class UserRepository:
         record = await self.conn.fetchrow(sql, user_id)
         return dict(record) if record else None
 
+    async def get_by_national_code(self, national_code: str):
+        sql = "SELECT * FROM users WHERE national_code = $1"
+        return await self.conn.fetchrow(sql, national_code)
     # ------------------ Creation ------------------ #
 
     async def create(self, user_in: dict) -> dict:

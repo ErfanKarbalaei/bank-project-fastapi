@@ -8,6 +8,10 @@ from app.repositories.user_repo import UserRepository
 from app.schemas.auth_schema import UserCreate
 from app.core.config import settings
 from jose import JWTError
+from app.core.exceptions import (
+    UserAlreadyExistsException,
+    InvalidCredentialsException,
+)
 
 
 class AuthService:
@@ -22,10 +26,14 @@ class AuthService:
     async def register_user(self, user_in: UserCreate) -> dict:
         """ثبت نام کاربر جدید (با بررسی شماره تلفن تکراری)."""
 
-        # بررسی تکراری بودن شماره موبایل
-        exists = await self.user_repo.get_by_phone(user_in.phone_number)
-        if exists:
-            raise ValueError("Phone number already registered")
+        existing_phone = await self.user_repo.get_by_phone(user_in.phone_number)
+        if existing_phone:
+            raise UserAlreadyExistsException("phone number")
+
+        # چک تکراری بودن کد ملی
+        existing_national = await self.user_repo.get_by_national_code(user_in.national_code)
+        if existing_national:
+            raise UserAlreadyExistsException("national code")
 
         hashed_password = hash_password(user_in.password)
 

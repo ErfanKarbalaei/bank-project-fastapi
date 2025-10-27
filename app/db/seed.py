@@ -1,14 +1,15 @@
 # app/db/seed.py
 import asyncio
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from faker import Faker
 from tqdm import tqdm
 
 from app.db.session import connect_db_pool, get_pool, close_db_pool
-from app.core.config import settings
+from app.core.security import hash_password
 
 fake = Faker("fa_IR")
+
 # پارامترها
 NUM_USERS = 50
 MIN_CARDS_PER_USER = 1
@@ -16,35 +17,42 @@ MAX_CARDS_PER_USER = 3
 NUM_TRANSACTIONS = 100_000
 BATCH_TX = 2000
 
-# مالی — واحد: ریال
-MIN_TX_AMOUNT_RIAL = 100_000           # 100k ریال
-MAX_TX_AMOUNT_RIAL = 50_000_000        # 50M ریال
-FEE_PERCENT = 0.10                     # 10%
-FEE_CAP_RIAL = 1_000_000               # 1,000,000 ریال = 100k تومان
+# واحد: ریال
+MIN_TX_AMOUNT_RIAL = 10_000        # 1,000 تومان
+MAX_TX_AMOUNT_RIAL = 500_000       # 50,000 تومان — کاهش یافته برای تست راحت‌تر
+FEE_PERCENT = 0.10
+FEE_CAP_RIAL = 1_000_000           # 100,000 تومان = 1,000,000 ریال
 
 
 async def insert_user(conn, national_code: str, full_name: str, phone: str, email: str, hashed_password: str):
     sql = """
-    INSERT INTO users (national_code, full_name, phone_number, email, hashed_password)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO users (national_code, full_name, phone_number, email, hashed_password, is_active)
+    VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING id;
     """
-    rec = await conn.fetchrow(sql, national_code, full_name, phone, email, hashed_password)
+    rec = await conn.fetchrow(sql, national_code, full_name, phone, email, hashed_password, True)
     return rec["id"]
 
 
 async def insert_card(conn, user_id: int, card_number: str, cvv2: str, expire_date: str, balance_rial: int):
     sql = """
-    INSERT INTO cards (user_id, card_number, cvv2, expire_date, balance)
-    VALUES ($1, $2, $3, $4, $5)
+    INSERT INTO cards (user_id, card_number, cvv2, expire_date, balance, is_active)
+    VALUES ($1, $2, $3, $4, $5, $6)
     RETURNING id;
     """
-    rec = await conn.fetchrow(sql, user_id, card_number, cvv2, expire_date, balance_rial)
+    rec = await conn.fetchrow(sql, user_id, card_number, cvv2, expire_date, balance_rial, True)
     return rec["id"]
 
 
+def random_datetime_within_last_n_months(months: int = 6) -> datetime:
+    now = datetime.now(tz=timezone.utc)
+    start = now - timedelta(days=30 * months)
+    delta_seconds = int((now - start).total_seconds())
+    rand_seconds = random.randint(0, max(0, delta_seconds))
+    return start + timedelta(seconds=rand_seconds)
+
+
 async def seed():
-    # ✅ ساختن Pool
     await connect_db_pool()
     pool = await get_pool()
     if pool is None:
@@ -53,12 +61,13 @@ async def seed():
     async with pool.acquire() as conn:
         print("🧍‍♂️ ایجاد کاربران...")
         user_ids = []
+
         for _ in range(NUM_USERS):
             national_code = str(fake.unique.random_number(digits=10)).zfill(10)
             full_name = fake.name()
-            phone = fake.phone_number()
+            phone = f"09{random.randint(100000000, 999999999)}"
             email = fake.unique.email()
-            hashed_password = fake.password(length=12)
+            hashed_password = hash_password("bank123")
             uid = await insert_user(conn, national_code, full_name, phone, email, hashed_password)
             user_ids.append(uid)
 
@@ -66,7 +75,7 @@ async def seed():
         card_ids = []
 
         def generate_card_number():
-            prefix = random.choice(["6037", "6274", "5892", "6104"])  # چند BIN واقعی
+            prefix = random.choice(["6037", "6274", "5892", "6104"])
             rest = "".join(str(random.randint(0, 9)) for _ in range(12))
             return prefix + rest
 
@@ -98,11 +107,14 @@ async def seed():
             while dst["id"] == src["id"]:
                 dst = random.choice(card_ids)
 
+            # مقدار تراکنش کوچک‌تر (برای جلوگیری از رسیدن سریع به سقف در تست)
             amount = random.randint(MIN_TX_AMOUNT_RIAL, MAX_TX_AMOUNT_RIAL)
             fee = int(min(amount * FEE_PERCENT, FEE_CAP_RIAL))
-            status = random.choice(statuses)
+            status = random.choices(statuses, weights=[0.85, 0.10, 0.05])[0]
             description = fake.sentence(nb_words=6)
-            created_at = datetime.now(tz=timezone.utc)
+
+            # تاریخ تصادفی در 6 ماه گذشته (نه همه امروز)
+            created_at = random_datetime_within_last_n_months(6)
 
             tx_batch.append((src["id"], dst["id"], amount, fee, status, description, created_at))
 
