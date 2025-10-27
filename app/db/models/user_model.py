@@ -1,3 +1,4 @@
+# app/db/models/user_model.py
 from sqlalchemy import Column, Integer, String, Date, Boolean, DateTime, func
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -7,7 +8,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    national_code = Column(String(10), unique=True, nullable=False)
+    national_code = Column(String(10), unique=True, nullable=False, index=True)
     full_name = Column(String(100), nullable=False)
     phone_number = Column(String(20), unique=True, nullable=False)
     email = Column(String(120), unique=True, nullable=False)
@@ -16,4 +17,8 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    cards = relationship("Card", back_populates="owner", cascade="all, delete")
+    # روابط
+    cards = relationship("Card", back_populates="owner", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<User(id={self.id}, name='{self.full_name}', phone='{self.phone_number}')>"

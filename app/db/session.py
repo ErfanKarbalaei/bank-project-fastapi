@@ -16,8 +16,13 @@ from app.core.config import settings
 # فرض می‌کنیم Base در جای دیگری تعریف و ایمپورت شده است.
 
 # 2. متغیر گلوبال برای نگهداری Pool اتصال
-db_pool: Pool | None = None
+db_pool: asyncpg.Pool| None = None
 
+async def get_pool() -> asyncpg.Pool:
+    global db_pool
+    if db_pool is None:
+        await connect_db_pool()
+    return db_pool
 
 async def connect_db_pool():
     """ایجاد Connection Pool توسط asyncpg در زمان راه‌اندازی برنامه."""

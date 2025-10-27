@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         این URL را دست نمی‌زنیم تا Alembic به کار خود ادامه دهد.
         """
         return (
-            f"postgresql://"
+            f"postgresql+asyncpg://"
             f"{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
 

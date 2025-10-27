@@ -19,25 +19,22 @@ class AuthService:
 
     # در asyncpg ما از Connection (که از get_db_connection می آید) استفاده می کنیم
     # و Repositoryها مستقیماً عملیات را انجام می دهند.
-    async def register_user(self, user_in: UserCreate) -> dict:  # 👈 خروجی dict
-        """ثبت نام کاربر جدید. بررسی می کند که آیا کاربر از قبل وجود دارد."""
+    async def register_user(self, user_in: UserCreate) -> dict:
+        """ثبت نام کاربر جدید (با بررسی شماره تلفن تکراری)."""
 
-        # بررسی وجود شماره موبایل
+        # بررسی تکراری بودن شماره موبایل
         exists = await self.user_repo.get_by_phone(user_in.phone_number)
         if exists:
-            # این خطا معمولاً در Repository با UniqueViolationError مدیریت می شود،
-            # اما این چک اولیه برای خطای بهتر است.
             raise ValueError("Phone number already registered")
 
-            # هش کردن پسورد
+        # هش کردن پسورد
         hashed_password = hash_password(user_in.password)
 
-        # ⚠️ فراخوانی متد create جدید با آرگومان های تطبیق داده شده
-        # متد create در UserRepository اکنون یک دیکشنری برمی گرداند.
-        created_user_dict = await self.user_repo.create(
-            user_in=user_in,
-            hashed_password=hashed_password
-        )
+        # افزودن فیلد هش‌شده به user_in
+        user_in.hashed_password = hashed_password
+
+        # ساخت کاربر جدید
+        created_user_dict = await self.user_repo.create(user_in=user_in)
         return created_user_dict
 
     async def authenticate(self, phone_number: str, password: str) -> Optional[dict]:  # 👈 خروجی dict
