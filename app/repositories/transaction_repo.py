@@ -104,3 +104,19 @@ class TransactionRepository:
 
         total = await self.conn.fetchval(base_sql, *args)
         return Decimal(total or 0)
+
+
+
+    #------------------------------------------------------
+
+    async def success_per_hour(self):
+        sql = open("app/db/queries/query_1_success_transactions_per_hour.sql").read()
+        return await self.conn.fetch(sql)
+
+    async def user_monthly(self):
+        sql = open("app/db/queries/query_2_user_monthly_transactions.sql").read()
+        return await self.conn.fetch(sql)
+
+    async def card_monthly(self):
+        sql = open("app/db/queries/query_3_card_monthly_transactions.sql").read()
+        return await self.conn.fetch(sql)
