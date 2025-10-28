@@ -18,10 +18,6 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """
-        URL اتصال برای Alembic و SQLAlchemy-compatible.
-        این URL را دست نمی‌زنیم تا Alembic به کار خود ادامه دهد.
-        """
         return (
             f"postgresql+asyncpg://"
             f"{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
@@ -29,10 +25,6 @@ class Settings(BaseSettings):
 
     @property
     def asyncpg_url(self) -> str:
-        """
-        URL اتصال مستقیم برای asyncpg (بدون درایور).
-        ما از این در session.py استفاده خواهیم کرد.
-        """
         return (
             f"postgresql://"
             f"{self.DB_USER}:{self.DB_PASS}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
