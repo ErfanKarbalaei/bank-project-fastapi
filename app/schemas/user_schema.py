@@ -17,4 +17,4 @@ class UserOut(UserBase):
     id: int
 
     class Config:
-        from_attributes = True  # معادل orm_mode=True در Pydantic v2
+        from_attributes = True

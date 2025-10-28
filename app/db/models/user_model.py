@@ -1,4 +1,3 @@
-# app/db/models/user_model.py
 from sqlalchemy import Column, Integer, String, Date, Boolean, DateTime, func
 from sqlalchemy.orm import relationship
 from app.db.base import Base

@@ -1,5 +1,3 @@
-# app/repositories/transaction_repo.py
-
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List

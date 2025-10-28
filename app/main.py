@@ -1,35 +1,25 @@
 from fastapi import FastAPI
-from contextlib import asynccontextmanager # ایمپورت contextmanager
+from contextlib import asynccontextmanager
 from app.api.v1 import routers
-
 import logging
-# ایمپورت توابع مدیریت Pool جدید
 from app.db.session import connect_db_pool, close_db_pool
 
 logging.basicConfig(level=logging.DEBUG)
 
-
-# 1. تعریف تابع lifespan برای مدیریت چرخه عمر Pool
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 🌟 در زمان شروع برنامه (Startup)
     await connect_db_pool()
     yield
-    # 💥 در زمان خاموش شدن برنامه (Shutdown)
     await close_db_pool()
-
 
 app = FastAPI(
     title="Bank API",
     description="سیستم بانکی برای مدیریت کاربران، کارت‌ها و تراکنش‌ها",
     version="1.0.0",
-    lifespan=lifespan # اتصال تابع lifespan به برنامه
+    lifespan=lifespan
 )
 
-# 2. اضافه کردن روترها (بدون تغییر)
 app.include_router(routers.router)
-
-
 
 @app.get("/")
 async def root():
