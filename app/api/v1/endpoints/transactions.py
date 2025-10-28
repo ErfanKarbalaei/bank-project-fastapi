@@ -1,5 +1,3 @@
-# app/api/v1/endpoints/transaction.py
-
 import logging
 import traceback
 from datetime import datetime
@@ -29,7 +27,6 @@ from app.repositories.card_repo import CardRepository
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
-# ---------------- Dependencies ---------------- #
 
 def get_card_repo(conn: Connection = Depends(get_db_connection)) -> CardRepository:
     return CardRepository(conn)
@@ -44,7 +41,6 @@ def get_transaction_service(
 ) -> TransactionService:
     return TransactionService(conn, tx_repo, card_repo)
 
-# ---------------- Endpoints ---------------- #
 
 @router.post("/withdraw", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
 async def withdraw(

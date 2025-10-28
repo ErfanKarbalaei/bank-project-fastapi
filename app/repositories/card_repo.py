@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from typing import Optional
 
 class CardRepository:
-    """Repository برای کارت‌ها با asyncpg."""
 
     def __init__(self, conn: Connection):
         self.conn = conn

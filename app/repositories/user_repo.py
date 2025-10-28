@@ -2,7 +2,6 @@ from typing import Optional
 from asyncpg import Connection
 
 class UserRepository:
-    """Repository برای مدیریت کاربران با asyncpg."""
 
     def __init__(self, conn: Connection):
         self.conn = conn
