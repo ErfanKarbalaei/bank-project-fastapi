@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager # ایمپورت contextmanager
-from app.api.v1.endpoints import auth, transactions, cards
+from app.api.v1 import routers
 
 import logging
 # ایمپورت توابع مدیریت Pool جدید
@@ -27,9 +27,8 @@ app = FastAPI(
 )
 
 # 2. اضافه کردن روترها (بدون تغییر)
-app.include_router(auth.router)
-app.include_router(transactions.router)
-app.include_router(cards.router)
+app.include_router(routers.router)
+
 
 
 @app.get("/")

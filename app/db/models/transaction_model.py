@@ -1,6 +1,12 @@
-from sqlalchemy import Column, Integer, Numeric, ForeignKey, DateTime, String, func
+from sqlalchemy import Column, Integer, Numeric, ForeignKey, DateTime, String, func, Enum
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+import enum
+
+class TransactionStatus(str, enum.Enum):
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    PENDING = "PENDING"
 
 class Transaction(Base):
     __tablename__ = "transactions"
@@ -10,7 +16,11 @@ class Transaction(Base):
     dest_card_id = Column(Integer, ForeignKey("cards.id"))
     amount = Column(Numeric(15, 2), nullable=False)
     fee = Column(Numeric(15, 2), nullable=False)
-    status = Column(String(20), default="SUCCESS")
+    status = Column(
+        Enum(TransactionStatus, name="transactionstatus", create_type=True),
+        default=TransactionStatus.SUCCESS,
+        nullable=False,
+    )
     description = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

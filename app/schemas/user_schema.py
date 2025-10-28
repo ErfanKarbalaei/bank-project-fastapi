@@ -1,28 +1,20 @@
-# app/schemas/user_schema.py
-
+from pydantic import BaseModel, Field, EmailStr
 from datetime import date
-from pydantic import BaseModel, EmailStr
-
 
 class UserBase(BaseModel):
-    """مدل پایه‌ی کاربر (shared fields)."""
-    national_code: str
+    national_code: str = Field(..., pattern=r"^[0-9]{10}$")
     full_name: str
-    phone_number: str
+    phone_number: str = Field(..., pattern=r"^09[0-9]{9}$")
     email: EmailStr
     birth_date: date | None = None
     is_active: bool = True
 
 
 class UserCreate(UserBase):
-    """مدل ورودی برای ایجاد کاربر جدید."""
     password: str
 
-
 class UserOut(UserBase):
-    """مدل خروجی برای نمایش اطلاعات کاربر."""
     id: int
 
-    model_config = {
-        "from_attributes": True
-    }
+    class Config:
+        from_attributes = True  # معادل orm_mode=True در Pydantic v2
